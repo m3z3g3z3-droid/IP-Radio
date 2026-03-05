@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# 1. Entrada do usuário
+read -p "Digite o gênero (ex: rock, metal): " input
+tag=$(echo "$input" | tr -d '\r' | xargs)
+[ -z "$tag" ] && tag="study"
+
+echo "Buscando estações para: $tag..."
+
+# 2. Busca na API
+# Mudamos reverse=false para a API mandar as menos votadas primeiro.
+# Assim, conforme o terminal imprime, as mais votadas ficam por último.
+URL="https://de1.api.radio-browser.info/json/stations/search?tag=${tag}&order=votes&reverse=false"
+dados=$(curl -sL "$URL")
+
+# 3. Validação
+if [ -z "$dados" ] || [ "$dados" == "[]" ]; then
+    echo "Erro: Nenhuma rádio encontrada."
+    exit 1
+fi
+
+# 4. Lista formatada
+# Agora a lista flui naturalmente: as melhores ficam no final da tela.
+echo "$dados" | jq -r '
+  to_entries | .[] | 
+  "====================================
+  [\(.key)] \(.value.name)
+  🌍 País: \(.value.country)
+  👍 Votos: \(.value.votes)
+  📡 Codec: \(.value.codec)
+  🎶 Metadata ICY: \(if .value.has_extended_info then "SIM" else "NÃO" end)
+  ▶ URL: \(.value.url_resolved)"'
+
+echo "===================================="
+count=$(echo "$dados" | jq 'length')
+echo "Total encontrado: $count"
+
+# 5. Seleção
+read -p "Digite o número da rádio para tocar: " sel
+sel=$(echo "$sel" | tr -d '\r' | xargs)
+
+# 6. Extração e Play
+url=$(echo "$dados" | jq -r ".[$sel].url_resolved")
+nome=$(echo "$dados" | jq -r ".[$sel].name")
+
+if [ "$url" != "null" ] && [ -n "$url" ]; then
+#    clear
+    echo "📻 Tocando: $nome"
+    echo "Pressione [q] para parar."
+    mpv --no-video "$url"
+else
+    echo "Seleção inválida!"
+fi
